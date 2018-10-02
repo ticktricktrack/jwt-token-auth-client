@@ -1,0 +1,77 @@
+#!/usr/bin/env ruby
+require 'byebug'
+require 'aws-sdk'
+require 'chamber'
+require 'queue_workers/aws_environment'
+require 'queue_workers/dynamodb'
+require './lib/environmental_data/metadata_database'
+require 'csv'
+
+class NullLogger
+  def debug(*_); end
+end
+
+class LastOrderPolygons
+  include DynamoDBAccess
+  include DynamoDBJobAccess
+
+  attr_accessor :args, :job_id, :aws_env
+
+  def initialize
+    @args = ARGV
+    @environment_name = ENV.fetch('GS_ENV') { raise 'You must provide GS_ENV' }
+  end
+
+  def run!
+    puts helps and return if args.empty?
+    setup_aws
+
+    CSV.open('recent_orders.csv', 'wb') do |csv|
+      recent_orders.map do |order|
+        location = job(order['TaskId']).job_request.location
+        csv << [order['TaskId'], order['ReportReference'], location]
+      end
+    end
+  end
+
+  private
+
+  def n
+    args[1]
+  end
+
+  def report_type
+    args[0]
+  end
+
+  def recent_orders
+    @metadata_db.execute(
+      <<~END
+        SELECT TOP #{n} * FROM dbo.OrderProcessed25
+        where reporttype = '#{report_type}'
+        and completedat is not NULL
+        order by id desc
+      END
+    )
+  end
+
+  def setup_aws
+    Chamber.load namespaces: @environment_name
+    @metadata_db = MetadataDatabase.new
+    @aws_env = AWSEnvironment.new(Chamber.env.aws_environment)
+    @ddb = Aws::DynamoDB::Client.new
+  end
+
+  def job(job_id)
+    ddb_get_job(job_id)
+  end
+
+  def helps
+    <<~HELP
+      Fetches the last n orders from metadata and
+      saves a csv with report name, job_id and polygons
+    HELP
+  end
+end
+
+LastOrderPolygons.new.run!

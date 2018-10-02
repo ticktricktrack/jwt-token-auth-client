@@ -1,0 +1,47 @@
+#!/usr/bin/env ruby
+
+require 'awesome_print'
+# Disable Hashie warnings
+require 'hashie'
+Hashie.logger = Logger.new(nil)
+
+require 'thor'
+require './lib/database/groundsure_db'
+require './lib/invoicing/create_invoice'
+
+module Invoicing
+  class Billing < Thor
+    desc 'monthly', 'Runs monthly invoice for account'
+    long_desc <<~LONGDESC
+      monthly ACCOUNT_ID
+    LONGDESC
+    option :account_id
+    def monthly(account_id)
+      db = GroundsureDb.new.client
+      CreateInvoice.new(account_id: account_id, db: db).bill!
+    end
+
+    private
+
+    no_commands do
+      def info(message)
+        shell.say message, :yellow
+      end
+
+      def error_msg(message)
+        shell.say message, :red
+        exit 1
+      end
+
+      def success(message)
+        shell.say message, :green
+      end
+    end
+  end
+end
+
+# Invoicing::Billing.start(ARGV, shell: Thor::Shell::Color.new)
+
+accounts = ['long list of accounts']
+accounts.map { |account|  Invoicing::Billing.new.monthly(account) }
+        .map { |result| puts "account id - #{result.last}, invoice id - #{result.first}"}

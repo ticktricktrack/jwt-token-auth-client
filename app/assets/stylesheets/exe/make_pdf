@@ -1,0 +1,29 @@
+#!/usr/bin/env ruby
+require 'make_pdf/lib/make_pdf'
+
+def run!
+  debug = false
+  args = ARGV
+
+  if args.length > 0 && args.first == '--debug'
+    debug = true
+    args.shift
+  end
+
+  case args.length
+  when 1
+    input_filename = 'reportgen_debug/exploded_pdf/report_root.xml'
+    output_filename = ARGV.first
+  when 2
+    input_filename, output_filename = ARGV
+  else
+    puts 'ruby make_pdf.rb [--debug] [input.xml] output.pdf'
+    exit 2
+  end
+
+  make_pdf(input_filename, output_filename, debug)
+rescue PDFGenerationError => e
+  exit 1
+end
+
+run!

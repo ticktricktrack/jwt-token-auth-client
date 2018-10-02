@@ -1,0 +1,19 @@
+#!/usr/bin/env ruby
+require 'fileutils'
+require 'pdf_generator/pdf_generator'
+
+report_filename = if ARGV.first
+                    File.absolute_path(ARGV.first)
+                  else
+                    File.expand_path('../../reportgen_debug/report.json', __FILE__)
+                  end
+
+working_directory = File.expand_path('../../reportgen_debug/exploded_pdf', __FILE__)
+
+puts "using json file #{report_filename}"
+puts "using output directory #{working_directory}"
+
+FileUtils.mkdir_p working_directory
+puts 'warning: directory will be wiped before generation'
+
+generate_exploded_pdf(report_filename, working_directory)

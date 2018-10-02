@@ -1,0 +1,66 @@
+#!/usr/bin/env ruby
+require 'aws-sdk'
+require 'chamber'
+require 'pry'
+require 'json'
+# require './lib/queue_workers/aws_environment'
+require './lib/report_generator/data_checker'
+require './lib/helpers/zip_string'
+
+class Royalties
+  attr_accessor :job_id, :report_json
+
+  def initialize(job_id)
+    Chamber.load namespaces: ENV['GS_ENV']
+    @job_id = job_id
+    @report_json = fetch_report_json
+  end
+
+  def calculate
+    return "no json" unless report_json
+    puts "calculate royalties for #{job_id}"
+    DataChecker.new(job_id, report_json).check!
+
+  end
+
+  private
+
+  def fetch_report_json
+    return nil unless report_files_bucket.object(report_path).exists?
+
+    response = report_files_bucket.object(report_path).get
+    body = response.body.read
+    body = unzip(body) if response.content_encoding == 'gzip'
+    JSON.parse(body)
+  end
+
+  def unzip(string)
+    ZipString.new.decompress string
+  end
+
+  def zip(string)
+    ZipString.new.compress string
+  end
+
+  def report_files_bucket
+    Aws::S3::Bucket.new("gs-#{ENV['GS_ENV']}-computed-report-data")
+  end
+
+  def report_path
+    "#{job_id}.json"
+  end
+end
+
+
+Hashie.logger = Logger.new(nil)
+file_name = ''
+job_ids = JSON.parse(File.read(file_name))
+
+job_ids.each_with_index do |h, i|
+  next if h['done']
+  puts "i am doing #{file_name}"
+  puts "doing #{i + 1} from #{job_ids.length}"
+  Royalties.new(h['taskid']).calculate
+  h['done'] = true
+  File.write(file_name, JSON.pretty_generate(job_ids))
+end

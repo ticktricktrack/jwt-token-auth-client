@@ -1,0 +1,62 @@
+#!/usr/bin/env ruby
+
+require 'csv'
+require 'queue_workers/enqueue'
+require 'set'
+
+def run!
+  if ARGV.empty?
+    puts 'enqueue_csv filename.csv'
+    exit 1
+  end
+
+  filename = ARGV.first
+  puts "reading #{filename}"
+
+  num_passed = 0
+  num_referred = 0
+  total = 0
+  order_ids = Set.new
+
+  EnqueueStuff.new(expedite: true) do |enqueuer|
+    CSV.foreach(filename, headers: true, return_headers: false).each_with_index do |row, index|
+      # OrderDate,ProductName,location_poly
+      report_type = row.fetch 'OurCode'
+      order_id = row.fetch('OrderID').to_s
+      report_status = row.fetch 'Report Status'
+      easting = row.fetch 'Easting'
+      northing = row.fetch 'Northing'
+      passed = report_status == 'Pass'
+      referred = report_status == 'In need of further assessment/Fail'
+      raise "invalid report_status: #{report_status}" unless passed || referred
+      total += 1
+      num_passed += 1 if passed
+      num_referred += 1 if referred
+      order_id = make_unique(order_id, order_ids)
+      order_ids << order_id
+      enqueuer << create_fake_job_request(report_type, easting, northing, job_id = order_id)
+    end
+  end
+
+  puts "Done. total=#{total} passed=#{num_passed} referred=#{num_referred}"
+  passed_rate = percent(num_passed, total)
+  referred_rate =  percent(num_referred, total)
+  puts "pass rate: #{passed_rate}  referral rate: #{referred_rate}"
+end
+
+def make_unique(order_id, order_ids)
+  if order_ids.include? order_id
+    original_order_id = order_id
+    (1..100).each do |suffix|
+      order_id = "#{original_order_id}-#{suffix}"
+      break unless order_ids.include? order_id
+    end
+  end
+  order_id
+end
+
+def percent(partial, total)
+  (partial.to_f / total.to_f * 100.0).round 2
+end
+
+run!

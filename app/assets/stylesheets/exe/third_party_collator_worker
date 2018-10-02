@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+
+require 'queue_workers/command_line_options'
+require 'queue_workers/third_party_collator'
+require 'queue_workers/run_workers'
+
+options = regular_worker_options
+
+run_worker(ThirdPartyCollator, **options)

@@ -1,0 +1,86 @@
+#!/usr/bin/env ruby
+
+require 'byebug'
+require 'aws-sdk'
+require 'chamber'
+require 'queue_workers/aws_environment'
+require 'queue_workers/dynamodb'
+
+class NullLogger
+  def debug(*_); end
+end
+
+class EnqueueToRoyalties
+
+
+  attr_accessor :job_id
+
+  def initialize(job_id)
+    @job_id = job_id
+    @environment_name = ENV.fetch('GS_ENV') { raise 'You must provide GS_ENV' }
+    Chamber.load namespaces: @environment_name
+  end
+
+  def run!
+    # puts helps and return if args.empty?
+    send_message_to_sqs
+  end
+
+  private
+
+  # def setup_aws
+  #   # environment_name = ENV.fetch('GS_ENV') { raise 'You must provide GS_ENV' }
+  #   Chamber.load namespaces: @environment_name
+  #   @aws_env = AWSEnvironment.new(Chamber.env.aws_environment)
+  #   @ddb = Aws::DynamoDB::Client.new
+  # end
+
+
+  def queue_name
+    "gs-#{@environment_name}-reportgen-work-royalties"
+  end
+
+  def send_message_to_sqs
+    sqs = Aws::SQS::Client.new
+
+    queue_url = "https://sqs.eu-west-1.amazonaws.com/826369869390/#{queue_name}"
+
+    data = { job_id: job_id }
+    attributes = {
+      'job_id' => {
+        string_value: job_id,
+        data_type: 'String'
+      },
+      'message_type' => {
+        string_value: 'RoyaltiesRequest',
+        data_type: 'String'
+      }
+    }
+    sqs.send_message(
+      queue_url: queue_url,
+      message_body: JSON.pretty_generate(data),
+      message_attributes: attributes
+    )
+
+    puts "job added to queue: #{queue_name}"
+  end
+
+  def helps
+    <<~HELP
+      To update a job in DynamoDB run:
+      bundle exec exe/update_dynamodb_job job_id
+    HELP
+  end
+
+  # this should really not exist in here, cross module dependencies
+  def log
+    NullLogger.new
+  end
+
+  def timestamp_for_now
+    Time.now.getgm.strftime '%FT%TZ'
+  end
+end
+
+
+EnqueueToRoyalties.new(ARGV[0]).run!

@@ -1,0 +1,92 @@
+#!/usr/bin/env ruby
+# require 'pdf_test/test_worksheets'
+require 'pdf_test/end_to_end'
+require 'queue_workers/enqueue'
+require 'chamber'
+#require './lib/e2e_test/model/test'
+
+USAGE_TEXT = 'end_to_end_test [all] | [worksheets] [ all | MATCH ... ] | flood_risk [ all | [N] [N..M] ... ]'
+
+def run!
+  begin
+    test_spec = parse_args(ARGV)
+  rescue CommandLineParseError => e
+    puts e.message unless e.message.empty?
+    puts USAGE_TEXT if e.show_usage
+    exit 1
+  end
+
+  environment_name = ENV.fetch('GS_ENV') { raise 'You must provide GS_ENV' }
+  Chamber.load namespaces: environment_name
+  settings = Chamber.env.pdf_test
+
+  run_id = Time.now.getgm.tv_sec.to_s
+  request_set = Hash.new
+
+  if test_spec.worksheets
+    request_set.merge!(
+      worksheets_to_test(test_spec.worksheet_matches, settings.dashboard)
+    )
+  end
+
+  if test_spec.flood_risk
+    request_set.merge!(flood_risk_to_test(test_spec, settings.dashboard))
+  end
+
+  if request_set.empty?
+    puts 'nothing to do'
+    exit 1
+  end
+
+  test_set = create_test_set(request_set)
+  enqueue_tests(run_id, test_set, request_set)
+end
+
+def enqueue_tests(run_id, test_set, tests)
+  EnqueueStuff.new(expedite: true) do |enqueuer|
+    tests.each_pair do |run_request, run_reference|
+
+      chunks = run_request.split
+      report_type = chunks.shift
+      location = chunks.join(' ')
+
+      order_id = build_order_id report_type, run_id
+      puts "#{run_request}, job_id: #{order_id}"
+      options = OpenStruct.new
+      options.test_job = 'auto_test'
+      options.report_type = report_type
+      options.location = location
+      options.job_id = order_id
+      options.point_buffer = false
+
+      job_request = JobRequestFactory.new(options).job_request
+
+      job_request.test_job = 'auto_test' #ensure is auto test
+      enqueuer << job_request
+    end
+  end
+end
+
+def build_order_id(report_type, run_id)
+  report_type = 'eaior' if report_type == 'enviro_all_in_one_res'
+  "#{report_type}-BULK-#{run_id}-e2e"
+end
+
+def create_test_set(tests)
+  test_jobs = tests.keys.map do |key|
+    report_type, easting, northing = key.split
+    {
+      report_type: report_type,
+      easting: easting,
+      northing: northing
+    }
+  end
+
+  #E2eTest::Test.new(
+  #  status: 'progress',
+  #  test_job_ids: test_jobs,
+  #  environment: 'live'
+  #).save
+end
+
+run!

@@ -1,0 +1,41 @@
+#!/usr/bin/env ruby
+require 'thor'
+require 'json'
+require './lib/queue_workers/message_types'
+require './lib/helpers/report_json'
+require './lib/helpers/report_referral_stats'
+
+class ReferralStats < Thor
+  HEADERS = [
+    'report type',
+    'order_date',
+    'center point',
+    'report reference',
+    'site type',
+    'is point buffer',
+    'Datalayer / dataset',
+    'closest feature',
+    'number of features',
+    'features type',
+    'feature distance'
+  ]
+  desc 'create', 'INOFA report data stats for Stuart!'
+  def create(file_path)
+    job_ids = JSON.parse(File.read(file_path))
+    CSV.open("stuart.csv", "a") do |csv|
+      csv << HEADERS
+      job_ids.each_with_index do |h, i|
+        next if h['done']
+        puts "doing #{i + 1} from #{job_ids.length}"
+        job = Job.find job_id: h['taskid']
+        report_json = ReportJson.new(job).download
+        stats = ReportReferralStats.new(job, report_json).calculate
+        stats.map { |s| csv << s }
+        h['done'] = true
+        File.write(file_path, JSON.pretty_generate(job_ids))
+      end
+    end
+  end
+end
+
+ReferralStats.start(ARGV, shell: Thor::Shell::Color.new)

@@ -1,0 +1,68 @@
+#!/usr/bin/env ruby
+require 'aws-sdk'
+require 'chamber'
+require './lib/queue_workers/aws_environment'
+
+usage_message = 'master_switch [SHOW|RUN|STOP]'
+
+environment_name = ENV['GS_ENV']
+
+unless environment_name
+  puts usage_message
+  puts 'to use, set GS_ENV=something'
+  exit 1
+end
+
+if ARGV.length > 1
+  puts usage_message
+  exit 1
+end
+
+what_to_do = ARGV.empty? ? :SHOW : ARGV.first.upcase.to_sym
+
+unless [:SHOW, :RUN, :STOP].include?(what_to_do)
+  puts usage_message
+  exit 1
+end
+
+Chamber.load namespaces: environment_name
+aws_env = AWSEnvironment.new(Chamber.env.aws_environment)
+
+def get_should_run(aws_env)
+  s3 = Aws::S3::Client.new
+  resp = s3.get_object(bucket: aws_env.bucket('worker-process-control').s3_name, key: 'should_run')
+  resp.body.read.to_sym
+end
+
+def set_should_run(aws_env, run_setting)
+  s3 = Aws::S3::Client.new
+  s3.put_object(
+    bucket: aws_env.bucket('worker-process-control').s3_name,
+    key: 'should_run',
+    content_type: 'text/plain',
+    body: run_setting.to_s
+  )
+  get_should_run(aws_env)
+end
+
+current_should_run = get_should_run(aws_env)
+
+puts "should #{aws_env.name} run is set to #{current_should_run}"
+
+unless what_to_do == :SHOW
+  if  what_to_do == current_should_run
+    puts 'nothing to do'
+  else
+    print "setting to #{what_to_do}"
+    thread = Thread.new do
+      loop do
+        print '.'
+        sleep 0.1
+      end
+    end
+    current_should_run = set_should_run(aws_env, what_to_do)
+    thread.kill
+    puts
+    puts "#{aws_env.name} now set to #{current_should_run}"
+  end
+end

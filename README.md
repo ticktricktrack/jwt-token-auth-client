@@ -1,24 +1,12 @@
-# README
+### Dependency
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+run Michs login service https://github.com/octoberclub/passport-tutorial
 
-Things you may want to cover:
+### Playground fow JWT Authentication and Authorization
 
-* Ruby version
+`bundle exec rails s` to run the server
 
-* System dependencies
-
-* Configuration
-
-* Database creation
-
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
+- go to http://localhost:3000/rainer
+- it will redirect you to the login page
+- after logging in, Michs service sets a cookie with the JWT Authentication
+- this service checks authentication and permissions, otherwise redirects back to the login page

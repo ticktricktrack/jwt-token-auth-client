@@ -16,8 +16,10 @@ end
 private
 
 def authenticate
-  token = JWT.decode request.headers["Authorization"], 'foo'
-  raise NopeError unless token.first["permissions"].include?(action_name)
+  # token = request.headers["Authorization"]
+  token_string = cookies[:auth]
+  token = JWT.decode token_string, 'secret'
+  raise NopeError unless token.first["email"].include?(action_name)
 rescue
-  redirect_to "https://www.google.co.uk/search?q=foo"
+  redirect_to "http://localhost:8000?redirect=#{request.original_url}"
 end

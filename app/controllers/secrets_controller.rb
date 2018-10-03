@@ -18,4 +18,6 @@ private
 def authenticate
   token = JWT.decode request.headers["Authorization"], 'foo'
   raise NopeError unless token.first["permissions"].include?(action_name)
+rescue
+  redirect_to "https://www.google.co.uk/search?q=foo"
 end
